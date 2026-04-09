@@ -11,45 +11,45 @@
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ STAGE 0: PRE-PROCESSING UTILITIES (run once before main pipeline)            │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                               │
-│  0.1-check_contigs_gz.sh          0.2-download_assemblies.sh                │
-│  ├─ SLURM array (1-2114%25)       ├─ SLURM array (1-226%5)                  │
-│  ├─ gzip -tv on each .fasta.gz    ├─ Queries ENA filereport API             │
-│  └─ Logs integrity per file       ├─ Downloads via FTP to data/inbox/       │
+│                                                                              |
+│  0.1-check_contigs_gz.sh          0.2-download_assemblies.sh                 │
+│  ├─ SLURM array (1-2114%25)       ├─ SLURM array (1-226%5)                   │
+│  ├─ gzip -tv on each .fasta.gz    ├─ Queries ENA filereport API              │
+│  └─ Logs integrity per file       ├─ Downloads via FTP to data/inbox/        │
 │                                   └─ Names output as ERZ.fasta.gz            │
-│                                                                               │
+│                                                                              │
 │  0.3-check_md5_sequences.sh                                                  │
 │  ├─ SLURM array (1-225%20)                                                   │
-│  ├─ Compares first N sequences between data/inbox/ and data/assemblies/     │
-│  └─ MD5 match → [OK] · mismatch → exit 1                                   │
-│                                                                               │
+│  ├─ Compares first N sequences between data/inbox/ and data/assemblies/      │
+│  └─ MD5 match → [OK] · mismatch → exit 1                                     │
+│                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
                                     ↓
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │ BATCH SUBMISSION: 2.1-batch_manager.sh <batch> [--retry]                     │
 ├──────────────────────────────────────────────────────────────────────────────┤
 │  ├─ Validates batch number (1-13 or "test")                                  │
-│  ├─ Patches --array in 1.0 via sed on a temp script                         │
+│  ├─ Patches --array in 1.0 via sed on a temp script                          │
 │  ├─ Submits sbatch, waits for completion (squeue + sacct polling)            │
-│  ├─ Runs 2.2-check_batch_status.sh automatically after job finishes         │
+│  ├─ Runs 2.2-check_batch_status.sh automatically after job finishes          │
 │  └─ --retry mode: re-submits only FAILED line numbers from status.txt        │
 └──────────────────────────────────────────────────────────────────────────────┘
                                     ↓
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ STAGE 1: MAIN PIPELINE ORCHESTRATOR                                           │
+│ STAGE 1: MAIN PIPELINE ORCHESTRATOR                                          │
 │ 1.0-metagenome_pipeline.sh  (SLURM array task — one task = one sample)       │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                               │
+│                                                                              │
 │  SLURM directives (owned exclusively by 1.0):                                │
 │  ├─ --account=inali  --partition=principal                                   │
-│  ├─ --ntasks=1  --nodes=1  --cpus-per-task=4  --mem=24G                     │
+│  ├─ --ntasks=1  --nodes=1  --cpus-per-task=4  --mem=24G                      │
 │  ├─ --time=120:00:00                                                         │
-│  └─ --array patched by 2.1-batch_manager.sh (e.g. 1-200%20)                │
-│                                                                               │
-│  Per task:                                                                    │
+│  └─ --array patched by 2.1-batch_manager.sh (e.g. 1-200%20)                  │
+│                                                                              │
+│  Per task:                                                                   │
 │  ├─ Reads SRR_ACC and ERZ_ACC from resources/acc_map.tsv[SLURM_ARRAY_TASK_ID]│
-│  └─ Calls steps sequentially with exit-code guards (|| exit 1)              │
-│                                                                               │
+│  └─ Calls steps sequentially with exit-code guards (|| exit 1)               │
+│                                                                              │
 └──────────────────────────────────────────────────────────────────────────────┘
           │              │               │               │
           ↓              ↓               ↓               ↓
