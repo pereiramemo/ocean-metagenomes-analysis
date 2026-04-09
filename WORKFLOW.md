@@ -5,256 +5,209 @@
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                    OCEAN METAGENOMIC ANALYSIS WORKFLOW                       │
+│                    1,379 samples · 13 batches · SLURM HPC                   │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ STAGE 1: DATA ACQUISITION                                                     │
+│ STAGE 0: PRE-PROCESSING UTILITIES (run once before main pipeline)            │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                                │
-│  1.1-download_metagenomes.sh                                                  │
-│  ├─ Downloads raw metagenomic sequences from ENA                             │
-│  ├─ Retrieves assembly metadata (accession, sample info)                     │
-│  └─ Validates file integrity (gzip -tv checks)                              │
-│      └─> Output: Raw FASTQ/FASTA files                                       │
-│                                                                                │
+│                                                                               │
+│  0.1-check_contigs_gz.sh          0.2-download_assemblies.sh                │
+│  ├─ SLURM array (1-2114%25)       ├─ SLURM array (1-226%5)                  │
+│  ├─ gzip -tv on each .fasta.gz    ├─ Queries ENA filereport API             │
+│  └─ Logs integrity per file       ├─ Downloads via FTP to data/inbox/       │
+│                                   └─ Names output as ERZ.fasta.gz            │
+│                                                                               │
+│  0.3-check_md5_sequences.sh                                                  │
+│  ├─ SLURM array (1-225%20)                                                   │
+│  ├─ Compares first N sequences between data/inbox/ and data/assemblies/     │
+│  └─ MD5 match → [OK] · mismatch → exit 1                                   │
+│                                                                               │
 └──────────────────────────────────────────────────────────────────────────────┘
                                     ↓
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ STAGE 2: QUALITY CONTROL & ASSESSMENT                                        │
+│ BATCH SUBMISSION: 2.1-batch_manager.sh <batch> [--retry]                     │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                                │
-│  1.1-quality_check_fastp.sh                   1.2-quality_check.R            │
-│  ├─ Fastp quality assessment                  ├─ Quality metrics analysis    │
-│  ├─ HTML & JSON reports                       ├─ PhiX contamination detect   │
-│  ├─ PhiX detection                            ├─ Read count distributions    │
-│  └─ Adapter identification                    └─ Quality score plots         │
-│      └─> fastp_reports/                           └─> QC_plots/             │
-│          ├─ Sample_html_report/                       ├─ r1_mean_q_*.png    │
-│          └─ Sample_json_report/                       ├─ r2_mean_q_*.png    │
-│                                                       └─ phix_barplot.png    │
-│                                                                                │
+│  ├─ Validates batch number (1-13 or "test")                                  │
+│  ├─ Patches --array in 1.0 via sed on a temp script                         │
+│  ├─ Submits sbatch, waits for completion (squeue + sacct polling)            │
+│  ├─ Runs 2.2-check_batch_status.sh automatically after job finishes         │
+│  └─ --retry mode: re-submits only FAILED line numbers from status.txt        │
 └──────────────────────────────────────────────────────────────────────────────┘
                                     ↓
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ STAGE 3: PREPROCESSING (1.2-preprocess_metagenomes.sh)                       │
+│ STAGE 1: MAIN PIPELINE ORCHESTRATOR                                           │
+│ 1.0-metagenome_pipeline.sh  (SLURM array task — one task = one sample)       │
 ├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                                │
-│  2-preprocess_pipeline.sh                                                     │
-│  ├─ Adapter Trimming (BBDuk)                                                 │
-│  │   └─> Trimmed reads (FASTQ)                                               │
-│  │                                                                             │
-│  ├─ Paired-End Merging (PEAR/BBMerge)                                        │
-│  │   └─> Merged reads (FASTQ)                                                │
-│  │   └─> Unmerged R1/R2 (FASTQ)                                              │
-│  │                                                                             │
-│  ├─ Quality Trimming (using trimmomatic params)                              │
-│  │   └─> Quality-trimmed reads (FASTQ)                                       │
-│  │                                                                             │
-│  └─ Format Conversion (fq2fa.sh)                                             │
-│      └─> Output: *workable.fasta file (main output)                          │
-│          + stats.tsv (read statistics)                                       │
-│          + stats_plots.png (visualization)                                   │
-│                                                                                │
-│  Input: Raw R1/R2 paired-end reads                                           │
-│  Output: Quality-controlled FASTA for assembly                               │
-│                                                                                │
+│                                                                               │
+│  SLURM directives (owned exclusively by 1.0):                                │
+│  ├─ --account=inali  --partition=principal                                   │
+│  ├─ --ntasks=1  --nodes=1  --cpus-per-task=4  --mem=24G                     │
+│  ├─ --time=120:00:00                                                         │
+│  └─ --array patched by 2.1-batch_manager.sh (e.g. 1-200%20)                │
+│                                                                               │
+│  Per task:                                                                    │
+│  ├─ Reads SRR_ACC and ERZ_ACC from resources/acc_map.tsv[SLURM_ARRAY_TASK_ID]│
+│  └─ Calls steps sequentially with exit-code guards (|| exit 1)              │
+│                                                                               │
 └──────────────────────────────────────────────────────────────────────────────┘
-                                    ↓
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ STAGE 4: ASSEMBLY & MAPPING (1.3-assemble_and_map_metagenomes.sh)            │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                                │
-│  3-assembly_and_map_pipeline.sh                                              │
-│  ├─ DE NOVO ASSEMBLY (or use pre-assembled contigs)                         │
-│  │   ├─ MEGAHIT (meta-sensitive preset)                                     │
-│  │   └─> Output: contigs.fa (≥250 bp minimum)                               │
-│  │       Optional pre-assembled contigs input                                │
-│  │                                                                             │
-│  ├─ READ MAPPING                                                              │
-│  │   ├─ BWA-MEM indexing                                                     │
-│  │   ├─ Quality filtering (q≥10, primary alignments)                         │
-│  │   └─> SAM → BAM conversion (direct, memory-efficient)                     │
-│  │                                                                             │
-│  ├─ BAM PROCESSING                                                            │
-│  │   ├─ Sorting (SAMtools)                                                   │
-│  │   ├─ Indexing (.bam.bai files)                                            │
-│  │   └─ Optional duplicate removal (Picard)                                  │
-│  │                                                                             │
-│  └─ CLEANUP                                                                   │
-│      └─> Remove intermediate files & BWA indices                             │
-│                                                                                │
-│  Input: *workable.fasta (preprocessed reads)                                │
-│  Output: *_sorted.bam + *_sorted.bam.bai (final mapping)                   │
-│          [or *_sorted_markdup.bam if PCR duplicates removed]                │
-│                                                                                │
-└──────────────────────────────────────────────────────────────────────────────┘
-                                    ↓
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ STAGE 5: OUTPUTS & DATA PRODUCTS                                             │
-├──────────────────────────────────────────────────────────────────────────────┤
-│                                                                                │
-│  Assemblies:                  Mappings:              Diagnostics:            │
-│  ├─ contigs.fa               ├─ sorted.bam          ├─ QC plots             │
-│  └─ contigs_filtered.fa      ├─ sorted.bam.bai      ├─ statistics (TSV)     │
-│                               └─ markdup.metrics     ├─ fastp reports        │
-│                                  (if duplicates)    └─ preprocessing stats   │
-│                                                                                │
-│  Integration point: BAM files serve as input for:                           │
-│  • Binning and taxonomic classification                                     │
-│  • Gene prediction and functional annotation                                │
-│  • Abundance estimation and profiling                                       │
-│                                                                                │
-└──────────────────────────────────────────────────────────────────────────────┘
+          │              │               │               │
+          ↓              ↓               ↓               ↓
+┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+│ STEP 1.1     │ │ STEP 1.2     │ │ STEP 1.3     │ │ STEP 1.4     │
+│ Download     │→│ Preprocess   │→│ Assemble &   │→│ Cleanup      │
+│              │ │              │ │ Map          │ │ FASTQ        │
+└──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘
 ```
 
-## Workflow Stages in Detail
+---
 
-### Stage 1: Data Acquisition
-**Script:** `1.1-download_metagenomes.sh`
+## Step-by-Step Detail
 
-Downloads raw metagenomic sequences from the European Nucleotide Archive (ENA). This stage:
-- Retrieves FASTQ/FASTA files using provided accession numbers
-- Extracts metadata (sample information, collection date, location)
-- Validates file integrity using gzip integrity checks
-- Identifies incomplete or corrupted files for re-download
+### Step 1.1 — Download (`1.1-download_metagenomes.sh`)
 
-**Output:** Raw sequence files ready for quality assessment
+**Input:** SRR accession (from orchestrator `$1` or `SLURM_ARRAY_TASK_ID` fallback)
+**Output:** `data/raw/<SRR>/` with FASTQ.gz files; `data/raw/<SRR>.log`
+
+**Logic:**
+- Checks `data/raw/<SRR>.log` for `SUCCESS:` and `VALIDATION SUCCESS:` tags — skips if both present
+- Removes partial output directory before retrying
+- Calls `kingfisher get` with methods: `aws-http ena-ascp ena-ftp aws-cp prefetch`
+- Up to 10 retry attempts (360s sleep between failures, 60s on validation failure)
+- Validates: directory exists, FASTQ files present, each file ≥ 1 KB
+
+**Environment:** activates `ocean-metagenomes-env` conda environment
 
 ---
 
-### Stage 2: Quality Control & Assessment
-**Scripts:**
-- `1.1-quality_check_fastp.sh`
-- `1.2-quality_check.R`
+### Step 1.2 — Preprocess (`1.2-preprocess_metagenomes.sh`)
 
-Comprehensive quality evaluation of raw sequences without modification:
+**Input:** `data/raw/<SRR>/` FASTQ files
+**Output:** `data/preprocessed/<SRR>/` with QC'd reads; `data/preprocessed/<SRR>.log`
 
-**Fastp Analysis:**
-- Generates HTML and JSON quality reports
-- Detects and quantifies PhiX contamination
-- Identifies adapter sequences
-- Produces quality metrics per sample
-
-**R-based Statistical Analysis:**
-- Calculates mean quality scores (Q values) for R1 and R2 reads
-- Generates quality vs. read count scatter plots
-- Creates read count distribution histograms
-- Quantifies PhiX contamination percentages
-- Produces publication-ready visualizations
-
-**Output:**
-- QC plots (PNG format)
-- Fastp HTML/JSON reports
-- Statistical summaries
+**Processing:**
+1. Quality assessment (fastp)
+2. Adapter trimming (BBDuk)
+3. Paired-end merging (PEAR or BBMerge)
+4. Quality filtering and length trimming
+5. Stats summary (`stats.tsv`)
 
 ---
 
-### Stage 3: Preprocessing
-**Script:** `2-preprocess_pipeline.sh`
+### Step 1.3 — Assemble & Map (`1.3-assemble_and_map_metagenomes.sh`)
 
-Transforms raw reads into assembly-ready FASTA sequences through:
+**Input:** `data/preprocessed/<SRR>/`, pre-existing assembly from `data/assemblies/<ERZ>*.fasta.gz`
+**Output:** `data/mapped/<SRR>/` with sorted BAM + index; `data/mapped/<SRR>.log`
 
-1. **Adapter Trimming** (BBDuk)
-   - Removes Illumina adapters and other contaminants
-   - Configurable pattern matching
-
-2. **Paired-End Merging** (PEAR or BBMerge)
-   - Merges overlapping paired-end reads
-   - Retains unmerged R1/R2 for downstream analysis
-   - Reduces dataset redundancy
-
-3. **Quality Trimming**
-   - Removes low-quality bases
-   - Configurable Q-score threshold (default: 20)
-   - Minimum length filtering
-
-4. **Format Conversion** (fq2fa.sh)
-   - Converts FASTQ to FASTA format
-   - Single unified FASTA file for assembly
-
-**Output:**
-- `*workable.fasta` - Main quality-controlled FASTA file
-- `stats.tsv` - Read statistics (count, length distributions)
-- `stats_plots.png` - Visual summary of preprocessing
-
-**Key Parameters:**
-- Minimum read length: 75 bp (default)
-- Quality score threshold: 20 (default)
-- Merger tool: PEAR or BBMerge (default: PEAR)
+**Logic:**
+- Checks `data/mapped/<SRR>.log` for `SUCCESS:` tag — skips if present
+- Uses pre-existing ERZ assembly if available; otherwise runs MEGAHIT de novo assembly
+- BWA-MEM alignment with quality filter (q ≥ 10, primary alignments only)
+- SAM → BAM → sorted BAM → index
+- Optional PCR duplicate removal (Picard)
+- Cleanup of intermediate SAM files and BWA indices
 
 ---
 
-### Stage 4: Assembly & Mapping
-**Script:** `3-assembly_and_map_pipeline.sh`
+### Step 1.4 — Cleanup (`1.4-cleanup_fastq.sh`)
 
-Performs de novo metagenome assembly and aligns reads to assembled contigs:
+**Input:** `data/raw/<SRR>/` and `data/preprocessed/<SRR>/`
+**Output:** FASTQ files deleted; MD5 checksums written to deleted-file logs
 
-1. **De Novo Assembly** (MEGAHIT)
-   - Sensitive assembly for low-abundance sequences
-   - Supports pre-existing assemblies as alternative input
-   - Filters contigs by minimum length (250 bp default)
-   - Multi-k assembly strategy for improved completeness
-
-2. **Read Mapping** (BWA-MEM)
-   - High-throughput alignment of reads to contigs
-   - Quality filtering (mapping quality ≥ 10)
-   - Primary alignments only (excludes secondary/supplementary)
-   - Memory-efficient: direct SAM-to-BAM conversion
-
-3. **BAM Processing**
-   - Sorting by genomic coordinate
-   - Index generation (.bam.bai)
-   - Optional PCR duplicate removal (Picard)
-   - Metrics generation for duplicate analysis
-
-4. **Automatic Cleanup**
-   - Removes intermediate SAM files
-   - Deletes BWA indices to save disk space
-
-**Output:**
-- `*_sorted.bam` - Primary alignment file
-- `*_sorted.bam.bai` - BAM index
-- `*_sorted_markdup.bam` (optional) - Duplicate-marked BAM
-- `*.metrics.txt` - Picard duplicate metrics
+**Logic:**
+- Skips if both `<SRR>_deleted.log` files already contain `SUCCESS:` tag
+- Computes MD5 of each FASTQ before deleting (audit trail)
+- Keeps log files and `stats.tsv`; removes only `*.fastq`, `*.fastq.gz`, `*.fq`, `*.fq.gz`
 
 ---
 
-### Stage 5: Outputs & Data Products
+## Skip / Retry Logic
 
-**Assembly Files:**
-- `contigs.fa` - Full assembly
-- `contigs_filtered.fa` - Filtered to minimum length
+Every step is idempotent — re-running a completed step is safe:
 
-**Mapping Files:**
-- Sorted BAM files with indices
-- Ready for downstream analyses:
-  - Metagenomic binning (MetaBAT, CONCOCT)
-  - Taxonomic classification (Kraken2, CAT)
-  - Gene prediction (FragGeneScan, Prodigal)
-  - Abundance profiling (CoverM, jgi_summarize_bam_contig_depths)
+| Step | Skip condition |
+|------|---------------|
+| 1.1 | `SUCCESS:` AND `VALIDATION SUCCESS:` in `data/raw/<SRR>.log` |
+| 1.2 | `SUCCESS:` in `data/preprocessed/<SRR>.log` |
+| 1.3 | `SUCCESS:` in `data/mapped/<SRR>.log` |
+| 1.4 | `SUCCESS:` in both deleted-file logs |
+
+**Retry workflow:**
+```bash
+bash scripts/2.2-check_batch_status.sh 1        # generates logs/batch_1/status.txt
+bash scripts/2.1-batch_manager.sh 1 --retry     # re-submits only FAILED line numbers
+```
 
 ---
 
-## Key Dependencies & Tools
+## Batch Management
 
-| Stage | Tools | Purpose |
-|-------|-------|---------|
-| **1** | curl, wget, gzip | Download and validate sequences |
-| **2** | fastp, ShortRead (R), dada2 (R), ggplot2 (R) | Quality assessment and visualization |
-| **3** | BBTools (BBDuk), PEAR/BBMerge, seqtk, pigz | Read preprocessing |
-| **4** | MEGAHIT, BWA, SAMtools, Picard, EMBOSS | Assembly and mapping |
+### 2.1-batch_manager.sh
+
+Orchestrates a full batch run:
+1. Patches `--array` spec into `1.0-metagenome_pipeline.sh` via `sed` on a temp script
+2. Submits via `sbatch`; polls `squeue`/`sacct` until completion
+3. Automatically runs `2.2-check_batch_status.sh` after job finishes
+4. Logs everything to `logs/batch_<N>/2.1-batch_manager_<timestamp>.log`
+
+**Throttle:** `%20` concurrent tasks → 20 × 4 CPUs = 80 CPUs max (≈ 4 nodes at 20 CPUs each). Adjust to control how many nodes are used simultaneously.
+
+### 2.2-check_batch_status.sh
+
+Inspects output directories and log files for each sample in a batch:
+- **Download OK:** `data/raw/<SRR>.log` has `SUCCESS:` OR FASTQ files present
+- **Preprocess OK:** `data/preprocessed/<SRR>.log` has `SUCCESS:` OR FASTQ files present
+- **Assembly OK:** `data/mapped/<SRR>.log` has `SUCCESS:` OR BAM files present
+
+Writes:
+- `logs/batch_<N>/status.txt` — `OK`/`FAILED` per line number (used by `--retry`)
+- `logs/batch_<N>/details.csv` — per-sample stage breakdown
+
+### 2.3-batch_dashboard.sh
+
+Color-coded terminal dashboard showing progress across all 13 batches:
+- Green = completed, Yellow = in progress, Red = not started/failed
+- `--watch` flag auto-refreshes every 60 seconds
+
+---
+
+## SLURM Node Strategy
+
+- **`--nodes=1`**: each array task is pinned to a single node
+- SLURM bin-packs by default: fills one node before spilling to the next
+- With `%20` throttle: 20 concurrent tasks × 4 CPUs = 80 CPUs → typically 4 nodes at full capacity
+- Reduce throttle (e.g. `%10`) to concentrate onto fewer nodes
 
 ---
 
 ## Data Flow Summary
 
 ```
-Raw Sequences → QC Assessment → Preprocessing → Assembly → Mapping → BAM Files
-(ENA FASTQ)    (fastp + R)    (Merge + Trim)  (MEGAHIT)  (BWA)    (Indexed)
-    ↓                ↓             ↓              ↓         ↓          ↓
-HTML Reports     QC Plots    FASTA Output    Contigs    SAM→BAM   Ready for
-JSON Reports   PhiX %age    Statistics      Filtered   Dedup      Downstream
-             Distribution   Metadata        Quality    Indexed    Analyses
+resources/acc_map.tsv
+(ERZ_ACC  SRR_ACC)
+        │
+        ├─ ERZ_ACC ──→ data/assemblies/<ERZ>*.fasta.gz  (pre-existing contigs)
+        │
+        └─ SRR_ACC ──→ [1.1 Download]
+                              │
+                        data/raw/<SRR>/
+                              │
+                       [1.2 Preprocess]
+                              │
+                   data/preprocessed/<SRR>/
+                              │
+                    [1.3 Assemble & Map]
+                       ├── MEGAHIT (if no pre-existing assembly)
+                       └── BWA-MEM + SAMtools
+                              │
+                       data/mapped/<SRR>/
+                       ├── <SRR>_sorted.bam
+                       └── <SRR>_sorted.bam.bai
+                              │
+                        [1.4 Cleanup]
+                              │
+                   raw + preprocessed FASTQ deleted
+                   (MD5 audit trail kept in logs)
 ```
 
 ---
@@ -263,78 +216,59 @@ JSON Reports   PhiX %age    Statistics      Filtered   Dedup      Downstream
 
 ```
 ocean-metagenomes/
+├── conf.sh                              # Exports: WORKSPACE, DATA, SCRIPTS, RESOURCES, CONTIGS
 ├── scripts/
-│   ├── 1.1-download_metagenomes.sh
-│   ├── 1.2-preprocess_metagenomes.sh
-│   ├── 1.3-assemble_and_map_metagenomes.sh
-│   ├── check_contigs_gz.sh
-│   ├── download_assemblies.sh
-│   └── toolbox/
-│       └── metagenomic_pipelines/
-│           ├── modules/
-│           │   ├── 1.1-quality_check_fastp.sh
-│           │   ├── 1.2-quality_check.R
-│           │   ├── 2-preprocess_pipeline.sh
-│           │   ├── 3-assembly_and_map_pipeline.sh
-│           │   ├── conf.sh
-│           │   └── resources/
-│           │       ├── fq2fa.sh
-│           │       └── plots.R
+│   ├── 0.1-check_contigs_gz.sh          # Validate .fasta.gz integrity (SLURM array)
+│   ├── 0.2-download_assemblies.sh       # Re-download assemblies from ENA (SLURM array)
+│   ├── 0.3-check_md5_sequences.sh       # MD5 cross-check inbox vs assemblies (SLURM array)
+│   ├── 1.0-metagenome_pipeline.sh       # Orchestrator — all SLURM headers live here
+│   ├── 1.1-download_metagenomes.sh      # Download step (no SLURM headers)
+│   ├── 1.2-preprocess_metagenomes.sh    # Preprocess step (no SLURM headers)
+│   ├── 1.3-assemble_and_map_metagenomes.sh  # Assembly + mapping (no SLURM headers)
+│   ├── 1.4-cleanup_fastq.sh             # FASTQ cleanup (no SLURM headers)
+│   ├── 2.1-batch_manager.sh             # Batch submission and retry
+│   ├── 2.2-check_batch_status.sh        # Batch status report
+│   ├── 2.3-batch_dashboard.sh           # Multi-batch dashboard
+│   └── toolbox/metagenomic_pipelines/
+│       └── modules/
+│           ├── 1.1-quality_check_fastp.sh
+│           ├── 2-preprocess_pipeline.sh
 │           └── environment.yml
-├── data/                    # Input data directory
-├── resources/               # Metadata and reference files
-├── logs/                    # SLURM logs and run outputs
-└── tmp/                     # Temporary files
+├── data/
+│   ├── raw/                             # Downloaded FASTQ (deleted after step 1.4)
+│   ├── preprocessed/                    # QC'd reads (deleted after step 1.4)
+│   ├── mapped/                          # Final BAM files (kept)
+│   └── assemblies/                      # Pre-existing contig FASTA files
+├── resources/
+│   ├── acc_map.tsv                      # ERZ<TAB>SRR per line; line N = array task N
+│   └── Notes.md
+└── logs/
+    ├── slurm_logs/                      # %x_%A_%a.out / .err per task
+    └── batch_<N>/
+        ├── 2.1-batch_manager_<ts>.log
+        ├── status.txt                   # OK/FAILED per line number
+        └── details.csv                  # Per-sample stage breakdown
 ```
 
 ---
 
-## Execution Flow
+## Key Dependencies
 
-The workflow is orchestrated through three main wrapper scripts:
-
-1. **`1.1-download_metagenomes.sh`** → Downloads raw sequences
-2. **`1.2-preprocess_metagenomes.sh`** → QC assessment + preprocessing
-3. **`1.3-assemble_and_map_metagenomes.sh`** → Assembly + read mapping
-
-Each wrapper script calls corresponding modules from the `metagenomic_pipelines` toolbox.
-
----
-
-## Quality Control & Validation
-
-- **Integrity checks:** gzip -tv on downloaded files
-- **PhiX contamination:** Detected and quantified at QC stage
-- **Read quality:** Assessed per-position and per-read
-- **Contig filtering:** Minimum 250 bp length threshold
-- **Mapping quality:** Minimum mapping quality score of 10
-- **Duplicate detection:** Optional Picard duplicate marking
+| Stage | Tools | Purpose |
+|-------|-------|---------|
+| 0.* | curl, wget, gzip | Assembly download and integrity checks |
+| 1.1 | kingfisher | Multi-source FASTQ download with MD5 validation |
+| 1.2 | fastp, BBTools, PEAR/BBMerge, seqtk, pigz | QC and read preprocessing |
+| 1.3 | MEGAHIT, BWA, SAMtools, Picard | Assembly, mapping, BAM processing |
+| 1.4 | md5sum, bash | FASTQ cleanup with audit trail |
+| 2.* | sbatch, squeue, sacct | SLURM job management |
 
 ---
 
-## Environment & Dependencies
+## Notes on Data
 
-All dependencies are specified in `scripts/toolbox/metagenomic_pipelines/environment.yml` and can be installed via:
-
-```bash
-mamba env create -f environment.yml
-mamba activate metagenomic_pipeline
-```
-
-**Core Dependencies:**
-- Sequence processing: seqtk, BBTools, PEAR
-- Quality control: fastp, ShortRead, dada2
-- Assembly: MEGAHIT
-- Mapping: BWA, SAMtools
-- Utilities: Picard, EMBOSS, pigz
-- Statistical analysis: R with tidyverse, ggplot2
-
----
-
-## Notes on Data Processing
-
-- **226 assemblies were initially incomplete** (identified via gzip -tv integrity checks)
-- Re-downloaded assemblies were validated against originals using MD5 checksums
-- The accession "ERZ477576" was not found in ENA but exists in local storage
-- See `resources/Notes.md` for detailed re-download logs
-
+- 1,379 total samples from ocean metagenomes (ENA/SRA)
+- 226 assemblies were re-downloaded due to gzip integrity failures (identified by `0.1`)
+- Re-downloads validated against originals using MD5 on first N sequences (`0.3`)
+- Accession `ERZ477576` not found in ENA but exists in local storage
+- See `resources/Notes.md` for full processing history
