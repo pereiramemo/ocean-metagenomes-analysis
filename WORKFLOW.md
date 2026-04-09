@@ -4,7 +4,7 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    OCEAN METAGENOMIC ANALYSIS WORKFLOW                       │
+│                    OCEAN METAGENOMIC ANALYSIS WORKFLOW                      │
 │                    1,379 samples · 13 batches · SLURM HPC                   │
 └─────────────────────────────────────────────────────────────────────────────┘
 
