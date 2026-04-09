@@ -123,6 +123,41 @@ The orchestrator (`1.0-metagenome_pipeline.sh`) owns all SLURM directives:
 - `%20` throttle: limits concurrent tasks; adjust to control node usage
 - Subscripts 1.1–1.4 have **no SLURM headers** — they are called by the orchestrator
 
+## Fault Tolerance and Retry Strategy
+
+### Per-sample log files and SUCCESS tags
+
+Each processing step writes a log file named `<SRR_ACC>.log` inside the step's output directory:
+
+| Step | Log location |
+|------|-------------|
+| 1.1 Download | `data/raw/<SRR>.log` |
+| 1.2 Preprocess | `data/preprocessed/<SRR>.log` |
+| 1.3 Assemble & Map | `data/mapped/<SRR>.log` |
+
+If the step completes without errors, the log ends with a `SUCCESS:` tag. On re-submission, each step checks for this tag first — if found, the step is skipped, making every step idempotent.
+
+### Detecting and retrying failed samples
+
+After a batch finishes, `2.2-check_batch_status.sh` scans the log files for each sample in the batch, looking for the `SUCCESS:` tag in each step's log. Samples missing any tag are marked `FAILED` and their line numbers are saved to `logs/batch_<N>/status.txt`.
+
+To re-run only the failed samples:
+
+```bash
+bash scripts/2.1-batch_manager.sh <batch> --retry
+```
+
+This reads the `FAILED` line numbers from `status.txt` and re-submits them as a new SLURM array job. Completed samples are untouched because each step skips on `SUCCESS:`.
+
+### FASTQ cleanup audit trail
+
+After assembly (`1.3`) completes successfully, `1.4-cleanup_fastq.sh` deletes all raw and preprocessed FASTQ files to free disk space. Before deleting each file, it computes the **MD5 checksum of the uncompressed content** and writes it to a deletion log inside the sample directory:
+
+- `data/raw/<SRR>/<SRR>_deleted.log` — MD5s and paths of removed raw FASTQ files
+- `data/preprocessed/<SRR>/<SRR>_deleted.log` — MD5s and paths of removed preprocessed FASTQ files
+
+These logs serve as a permanent audit trail: if data integrity ever needs to be verified, the original file content can be reconstructed and its MD5 compared against the recorded value. The cleanup step is also idempotent — it checks for a `SUCCESS:` tag in both logs before running.
+
 ## Batch Definitions
 
 | Batch | Samples | Count |
