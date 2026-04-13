@@ -4,7 +4,7 @@ A bioinformatics pipeline for processing, assembling, and analyzing ocean metage
 
 ## Overview
 
-This project implements a multi-stage workflow for metagenomic analysis: download → quality control & preprocessing → de novo assembly → read mapping → cleanup. The pipeline processes 1,379 ocean metagenome samples from ENA/SRA, organized into 13 batches, and runs as SLURM array jobs with full retry and status monitoring capabilities.
+This project implements a multi-stage workflow for metagenomic analysis: download → quality control & preprocessing → de novo assembly → read mapping → cleanup. The pipeline processes 1,379 ocean metagenome samples from ENA/SRA, organized into 7 batches of 200 samples (except the last), and runs as SLURM array jobs with full retry and status monitoring capabilities.
 
 ## Quick Start
 
@@ -68,7 +68,7 @@ Steps 1.1–1.4 also work standalone: they accept the SRR accession as `$1`, or 
 |--------|---------|
 | `2.1-batch_manager.sh` | Submits 1.0 as a SLURM array job, waits for completion, runs status check |
 | `2.2-check_batch_status.sh` | Inspects logs and output directories; writes `status.txt` and `details.csv` |
-| `2.3-batch_dashboard.sh` | Color-coded dashboard showing progress across all 13 batches |
+| `2.3-batch_dashboard.sh` | Color-coded dashboard showing progress across all 7 batches |
 
 ## Directory Structure
 
@@ -163,9 +163,12 @@ These logs serve as a permanent audit trail: if data integrity ever needs to be 
 | Batch | Samples | Count |
 |-------|---------|-------|
 | 1 | 1–200 | 200 |
-| 2 | 201–300 | 100 |
-| 3–12 | 100 each | 1000 |
-| 13 | 1301–1379 | 79 |
+| 2 | 201–400 | 200 |
+| 3 | 401–600 | 200 |
+| 4 | 601–800 | 200 |
+| 5 | 801–1000 | 200 |
+| 6 | 1001–1200 | 200 |
+| 7 | 1201–1379 | 179 |
 | test | 1–4 | 4 |
 
 ## Skip / Retry Logic
