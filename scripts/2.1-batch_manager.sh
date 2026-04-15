@@ -16,17 +16,13 @@ source /home/epereira/workspace/dev/ocean-metagenomes/conf.sh
 
 # Define batch ranges (200 samples per batch)
 declare -A BATCH_START=(
-    [1]=1    [2]=201   [3]=301   [4]=401   [5]=501
-    [6]=601  [7]=701   [8]=801   [9]=901   [10]=1001
-    [11]=1101 [12]=1201 [13]=1301
-    ["test"]=1
+    [1]=1      [2]=201   [3]=401   [4]=601   [5]=801
+    [6]=1001   [7]=1201 ["test"]=1
 )
 
 declare -A BATCH_END=(
-    [1]=200    [2]=300   [3]=400   [4]=500   [5]=600
-    [6]=700    [7]=800   [8]=900   [9]=1000  [10]=1100
-    [11]=1200  [12]=1300 [13]=1379
-    ["test"]=4
+    [1]=200    [2]=400   [3]=600   [4]=800   [5]=1000
+    [6]=1200   [7]=1379 ["test"]=4
 )
 
 # Helper: Print usage
@@ -38,7 +34,7 @@ Submits 1.0-metagenome_pipeline.sh as a SLURM array job that runs all steps
 (download → preprocess → assemble+map → cleanup) sequentially per sample.
 
 Arguments:
-  batch_number     Batch number (1-13) or "test" (samples 1-4)
+  batch_number     Batch number (1-7) or "test" (samples 1-4)
   --retry         (Optional) Retry only failed samples from this batch
 
 Examples:
@@ -47,9 +43,12 @@ Examples:
 
 Batch definitions:
   Batch 1:  samples 1-200
-  Batch 2:  samples 201-300
-  ...
-  Batch 13: samples 1301-1379
+  Batch 2:  samples 201-400
+  Batch 3:  samples 401-600
+  Batch 4:  samples 601-800
+  Batch 5:  samples 801-1000
+  Batch 6:  samples 1001-1200
+  Batch 7:  samples 1201-1379
 
 EOF
     exit 1
@@ -58,7 +57,7 @@ EOF
 # Helper: Validate batch number
 validate_batch() {
     if [[ ! -v BATCH_START[$1] ]]; then
-        echo "ERROR: Invalid batch number '$1'. Must be 1-13."
+        echo "ERROR: Invalid batch number '$1'. Must be 1-7 or 'test'."
         exit 1
     fi
 }
