@@ -54,13 +54,13 @@ Orchestrated by `1.0-metagenome_pipeline.sh` as a single SLURM array job. Each a
 
 | Script | Purpose |
 |--------|---------|
-| `1.0-metagenome_pipeline.sh` | **Orchestrator** — owns all SLURM directives, runs 1.1→1.2→1.3→1.4 |
+| `1.0-metagenome_pipeline.sh` | **Orchestrator** — owns all SLURM directives, skip check, runs 1.1→1.2→1.3→1.4 |
 | `1.1-download_metagenomes.sh` | Downloads raw FASTQ from ENA/SRA via kingfisher (10 retries, MD5 validation) |
 | `1.2-preprocess_metagenomes.sh` | QC, adapter trimming, paired-end merging, quality filtering |
 | `1.3-assemble_and_map_metagenomes.sh` | MEGAHIT assembly + BWA-MEM mapping → sorted/indexed BAM |
 | `1.4-cleanup_fastq.sh` | Removes raw and preprocessed FASTQ files after successful assembly |
 
-Steps 1.1–1.4 also work standalone: they accept the SRR accession as `$1`, or fall back to `SLURM_ARRAY_TASK_ID` for lookup from `resources/acc_map.tsv`.
+Steps 1.1–1.3 contain no skip logic — they always execute when called. The skip decision is made exclusively by `1.0` before invoking any step. Steps 1.1–1.4 can be run standalone (accepting the SRR accession as `$1`, falling back to `SLURM_ARRAY_TASK_ID`), but will always re-execute without the skip protection.
 
 ### Stage 2: Batch Management (2.*)
 
@@ -110,36 +110,45 @@ ocean-metagenomes/
 The orchestrator (`1.0-metagenome_pipeline.sh`) owns all SLURM directives:
 
 ```bash
-#SBATCH --account=inali
 #SBATCH --ntasks=1
-#SBATCH --nodes=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=24G
 #SBATCH --time=120:00:00
-#SBATCH --array=1-200%20    # set in 2.1-batch_manager.sh at submission time
+#SBATCH --array=1-10        # overridden at submission time by 2.1-batch_manager.sh
 ```
 
-- `--nodes=1`: ensures each task runs on a single node (SLURM bin-packs naturally)
-- `%20` throttle: limits concurrent tasks; adjust to control node usage
-- Subscripts 1.1–1.4 have **no SLURM headers** — they are called by the orchestrator
+- `--ntasks=1`: each array task is a single process; multi-threading is handled internally by tools via `--cpus-per-task`
+- `--array` is rewritten by `2.1-batch_manager.sh` at submission time to match the batch range (e.g. `1-200%20`)
+- `%20` throttle: limits concurrent tasks to 20; adjust in `2.1-batch_manager.sh` to control node usage
+- Subscripts 1.1–1.4 have **no SLURM headers** — they are called as plain bash by the orchestrator
 
 ## Fault Tolerance and Retry Strategy
 
 ### Per-sample log files and SUCCESS tags
 
-Each processing step writes a log file named `<SRR_ACC>.log` inside the step's output directory:
+Each processing step writes a log file (`OUT_LOG`) named `<SRR_ACC>.log` in the step's output directory:
 
-| Step | Log location |
-|------|-------------|
-| 1.1 Download | `data/raw/<SRR>.log` |
-| 1.2 Preprocess | `data/preprocessed/<SRR>.log` |
-| 1.3 Assemble & Map | `data/mapped/<SRR>.log` |
+| Step | Log location | Success condition |
+|------|-------------|-------------------|
+| 1.1 Download | `data/raw/<SRR>.log` | `SUCCESS:` **and** `VALIDATION SUCCESS:` |
+| 1.2 Preprocess | `data/preprocessed/<SRR>.log` | `SUCCESS:` |
+| 1.3 Assemble & Map | `data/mapped/<SRR>.log` | `SUCCESS:` |
 
-If the step completes without errors, the log ends with a `SUCCESS:` tag. On re-submission, each step checks for this tag first — if found, the step is skipped, making every step idempotent.
+`1.1` writes `SUCCESS:` after a successful download and a separate `VALIDATION SUCCESS:` tag after file integrity checks pass. Both must be present for the sample to be considered complete. `1.2` and `1.3` write only `SUCCESS:`.
+
+### Skip logic (centralized in 1.0)
+
+Before invoking any step, `1.0-metagenome_pipeline.sh` checks all three logs. A sample is skipped entirely if and only if:
+
+- `data/raw/<SRR>.log` contains both `SUCCESS:` and `VALIDATION SUCCESS:`
+- `data/preprocessed/<SRR>.log` contains `SUCCESS:`
+- `data/mapped/<SRR>.log` contains `SUCCESS:`
+
+If any condition fails, **all three steps re-execute from scratch**. There is no partial skip — each sample is treated as an atomic unit. Steps 1.1–1.3 contain no skip logic of their own.
 
 ### Detecting and retrying failed samples
 
-After a batch finishes, `2.2-check_batch_status.sh` scans the log files for each sample in the batch, looking for the `SUCCESS:` tag in each step's log. Samples missing any tag are marked `FAILED` and their line numbers are saved to `logs/batch_<N>/status.txt`.
+After a batch finishes, `2.2-check_batch_status.sh` applies the same tag checks as `1.0` to classify each sample as `OK` or `FAILED`, writing results to `logs/batch_<N>/status.txt` and `logs/batch_<N>/details.csv`.
 
 To re-run only the failed samples:
 
@@ -147,7 +156,7 @@ To re-run only the failed samples:
 bash scripts/2.1-batch_manager.sh <batch> --retry
 ```
 
-This reads the `FAILED` line numbers from `status.txt` and re-submits them as a new SLURM array job. Completed samples are untouched because each step skips on `SUCCESS:`.
+This reads the `FAILED` line numbers from `status.txt` and re-submits them as a new SLURM array job.
 
 ### FASTQ cleanup audit trail
 
@@ -156,7 +165,7 @@ After assembly (`1.3`) completes successfully, `1.4-cleanup_fastq.sh` deletes al
 - `data/raw/<SRR>/<SRR>_deleted.log` — MD5s and paths of removed raw FASTQ files
 - `data/preprocessed/<SRR>/<SRR>_deleted.log` — MD5s and paths of removed preprocessed FASTQ files
 
-These logs serve as a permanent audit trail: if data integrity ever needs to be verified, the original file content can be reconstructed and its MD5 compared against the recorded value. The cleanup step is also idempotent — it checks for a `SUCCESS:` tag in both logs before running.
+These logs serve as a permanent audit trail. The cleanup step is also idempotent — it checks for a `SUCCESS:` tag in both logs before running.
 
 ## Batch Definitions
 
@@ -173,11 +182,12 @@ These logs serve as a permanent audit trail: if data integrity ever needs to be 
 
 ## Skip / Retry Logic
 
-Each step checks for a `SUCCESS:` tag in its log file before re-running:
-- **Step 1.1**: skips if `SUCCESS:` and `VALIDATION SUCCESS:` found in `data/raw/<SRR>.log`
-- **Step 1.3**: skips if `SUCCESS:` found in `data/mapped/<SRR>.log`
-- **Step 1.4**: skips if `SUCCESS:` found in both deleted-file logs
-- **Retry mode**: `2.1-batch_manager.sh <batch> --retry` re-submits only line numbers marked `FAILED` in `logs/batch_<N>/status.txt`
+The skip decision is made entirely by `1.0-metagenome_pipeline.sh`:
+
+- **Skip**: sample exits immediately if all three step logs have their required SUCCESS tags
+- **Re-run**: if any tag is missing, all steps (1.1 → 1.2 → 1.3 → 1.4) re-execute
+- **Step 1.4**: idempotent independently — skips if `SUCCESS:` found in both deleted-file logs
+- **Retry mode**: `2.1-batch_manager.sh <batch> --retry` re-submits only samples marked `FAILED` in `logs/batch_<N>/status.txt`
 
 ## Core Tools
 
