@@ -167,7 +167,7 @@ main() {
         # Full pipeline: download → preprocess → assemble+map → cleanup
         echo "PIPELINE: download → preprocess → assemble+map → cleanup"
         echo "────────────────────────────────────────────────────────────────────────────────"
-        if ! submit_and_wait "${SCRIPTS}/1.0-metagenome_pipeline.sh" "${array_spec}" "20" "Full pipeline (1.0)"; then
+        if ! submit_and_wait "${SCRIPTS}/1.0-metagenome_pipeline.sh" "${array_spec}" "5" "Full pipeline (1.0)"; then
             echo "Pipeline failed for one or more samples."
         fi
         echo ""

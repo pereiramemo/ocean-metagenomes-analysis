@@ -109,20 +109,14 @@ download_metagenomes() {
     local SRR_ACC="$1"
     local OUTPUT_DIR="$2"
     local OUT_DIR="${OUTPUT_DIR}/${SRR_ACC}"
-    local LOG_FILE="${OUTPUT_DIR}/${SRR_ACC}.log"
+    local OUT_LOG="${OUTPUT_DIR}/${SRR_ACC}.log"
 
     # Ensure kingfisher exists
     command -v kingfisher >/dev/null 2>&1 || {
     echo "ERROR: kingfisher not found in PATH"; exit 1;
     }
 
-    # Skip only if SUCCESS tag is found in the log
-    if [[ -f "${LOG_FILE}" ]] && grep -q "^VALIDATION SUCCESS:" "${LOG_FILE}" && grep -q "^SUCCESS:" "${LOG_FILE}"; then
-        echo "SKIPPED: ${SRR_ACC} already downloaded (SUCCESS and VALIDATION SUCCESS tags found in log)"
-        return 0
-    fi
-
-    # No SUCCESS tag — remove any partial output and re-download
+    # Remove any partial output and re-download
     [[ -d "${OUT_DIR}" ]] && rm -rf "${OUT_DIR}"
 
     # Write header log
@@ -133,11 +127,11 @@ download_metagenomes() {
         echo "Array Task: ${SLURM_ARRAY_TASK_ID}"
         echo "Node: $(hostname)"
         echo "-----------------------------------"
-    } > "${LOG_FILE}"
+    } > "${OUT_LOG}"
 
     # Retry loop (10 attempts)
     for attempt in {1..10}; do
-        echo "Attempt ${attempt}/10 for ${SRR_ACC}..." | tee -a "${LOG_FILE}"
+        echo "Attempt ${attempt}/10 for ${SRR_ACC}..." | tee -a "${OUT_LOG}"
 
         kingfisher get \
             --run-identifiers "${SRR_ACC}" \
@@ -147,31 +141,31 @@ download_metagenomes() {
             --check-md5sums \
             --extraction-threads 2 \
             --output-format-possibilities fastq.gz \
-            2>&1 | tee -a "${LOG_FILE}"
+            2>&1 | tee -a "${OUT_LOG}"
 
         STATUS=${PIPESTATUS[0]}
 
         if [[ $STATUS -eq 0 ]]; then
-            echo "SUCCESS: ${SRR_ACC} downloaded at $(date)" | tee -a "${LOG_FILE}"
+            echo "SUCCESS: ${SRR_ACC} downloaded at $(date)" | tee -a "${OUT_LOG}"
 
             # Validate the downloaded data
-            echo "Validating downloaded files..." | tee -a "${LOG_FILE}"
-            if validate_download "${OUT_DIR}" "${SRR_ACC}" >> "${LOG_FILE}" 2>&1; then
-                echo "VALIDATION SUCCESS: ${SRR_ACC} verified" | tee -a "${LOG_FILE}"
+            echo "Validating downloaded files..." | tee -a "${OUT_LOG}"
+            if validate_download "${OUT_DIR}" "${SRR_ACC}" >> "${OUT_LOG}" 2>&1; then
+                echo "VALIDATION SUCCESS: ${SRR_ACC} verified" | tee -a "${OUT_LOG}"
                 return 0
             else
-                echo "WARNING: Download succeeded but validation failed. Removing and retrying..." | tee -a "${LOG_FILE}"
+                echo "WARNING: Download succeeded but validation failed. Removing and retrying..." | tee -a "${OUT_LOG}"
                 rm -rf "${OUT_DIR}"
                 sleep 60  # Brief pause before retry
                 continue  # Skip to next attempt
             fi
         else
-            echo "Failed attempt ${attempt} for ${SRR_ACC}." | tee -a "${LOG_FILE}"
+            echo "Failed attempt ${attempt} for ${SRR_ACC}." | tee -a "${OUT_LOG}"
             sleep 360 # Wait before retrying
         fi
     done
 
-    echo "ERROR: All 10 attempts failed for ${SRR_ACC}" | tee -a "${LOG_FILE}"
+    echo "ERROR: All 10 attempts failed for ${SRR_ACC}" | tee -a "${OUT_LOG}"
     return 1
 }
 

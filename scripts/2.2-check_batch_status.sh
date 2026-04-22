@@ -10,21 +10,17 @@ source /home/epereira/workspace/dev/ocean-metagenomes/conf.sh
 
 # Define batch ranges
 declare -A BATCH_START=(
-    [1]=1    [2]=201   [3]=301   [4]=401   [5]=501
-    [6]=601  [7]=701   [8]=801   [9]=901   [10]=1001
-    [11]=1101 [12]=1201 [13]=1301
-    ["test"]=1
+    [1]=1      [2]=201   [3]=401   [4]=601   [5]=801
+    [6]=1001   [7]=1201 ["test"]=1
 )
 
 declare -A BATCH_END=(
-    [1]=200    [2]=300   [3]=400   [4]=500   [5]=600
-    [6]=700    [7]=800   [8]=900   [9]=1000  [10]=1100
-    [11]=1200  [12]=1300 [13]=1379
-    ["test"]=4
+    [1]=200    [2]=400   [3]=600   [4]=800   [5]=1000
+    [6]=1200   [7]=1379 ["test"]=4
 )
 
 usage() {
-    echo "Usage: $(basename "$0") <batc h_number>"
+    echo "Usage: $(basename "$0") <batch_number>"
     echo ""
     echo "Analyzes SLURM logs to check batch completion status."
     exit 1
@@ -38,33 +34,18 @@ get_accession() {
 
 # Check if sample completed each stage
 check_sample_stages() {
-    local srr_acc=$1
+    local SRR_ACC=$1
 
     local d1_ok=0 d2_ok=0 d3_ok=0
 
-    # Check stage 1: Download — files present OR SUCCESS tag in log
-    local d1_log="${DATA}/raw/${srr_acc}.log"
-    if { [[ -f "${d1_log}" ]] && grep -q "^SUCCESS:" "${d1_log}"; } || \
-       { [[ -d "${DATA}/raw/${srr_acc}" ]] && \
-         [[ $(find "${DATA}/raw/${srr_acc}" -type f \( -name "*.fastq.gz" -o -name "*.fastq" \) 2>/dev/null | wc -l) -gt 0 ]]; }; then
-        d1_ok=1
-    fi
+    local d1_log="${DATA}/raw/${SRR_ACC}.log"
+    [[ -f "${d1_log}" ]] && grep -q "^SUCCESS:" "${d1_log}" && grep -q "^VALIDATION SUCCESS:" "${d1_log}" && d1_ok=1
 
-    # Check stage 2: Preprocess — files present OR SUCCESS tag in log
-    local d2_log="${DATA}/preprocessed/${srr_acc}.log"
-    if { [[ -f "${d2_log}" ]] && grep -q "^SUCCESS:" "${d2_log}"; } || \
-       { [[ -d "${DATA}/preprocessed/${srr_acc}" ]] && \
-         [[ $(find "${DATA}/preprocessed/${srr_acc}" -type f -name "*.fastq.gz" 2>/dev/null | wc -l) -gt 0 ]]; }; then
-        d2_ok=1
-    fi
+    local d2_log="${DATA}/preprocessed/${SRR_ACC}.log"
+    [[ -f "${d2_log}" ]] && grep -q "^SUCCESS:" "${d2_log}" && d2_ok=1
 
-    # Check stage 3: Assembly & Mapping — files present OR SUCCESS tag in log
-    local d3_log="${DATA}/mapped/${srr_acc}.log"
-    if { [[ -f "${d3_log}" ]] && grep -q "^SUCCESS:" "${d3_log}"; } || \
-       { [[ -d "${DATA}/mapped/${srr_acc}" ]] && \
-         [[ $(find "${DATA}/mapped/${srr_acc}" -type f -name "*.bam" 2>/dev/null | wc -l) -gt 0 ]]; }; then
-        d3_ok=1
-    fi
+    local d3_log="${DATA}/mapped/${SRR_ACC}.log"
+    [[ -f "${d3_log}" ]] && grep -q "^SUCCESS:" "${d3_log}" && d3_ok=1
 
     echo "${d1_ok} ${d2_ok} ${d3_ok}"
 }
@@ -77,7 +58,7 @@ main() {
 
     # Validate batch
     if [[ ! -v BATCH_START[$batch] ]]; then
-        echo "ERROR: Invalid batch number '$batch'. Must be 1-13."
+        echo "ERROR: Invalid batch number '$batch'. Must be 1-7 or 'test'."
         exit 1
     fi
 

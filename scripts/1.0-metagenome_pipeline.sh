@@ -14,9 +14,9 @@
 #SBATCH --error=/home/epereira/workspace/dev/ocean-metagenomes/logs/slurm_logs/%x_%A_%a.err
 #SBATCH --time=120:00:00            # budget: 48h download + 48h preprocess + 24h assemble
 #SBATCH --ntasks=1
-#SBATCH --nodelist=compute-[1-3],compute-26 
+#SBATCH --distribution=block
 #SBATCH --cpus-per-task=4           # max across all steps
-#SBATCH --mem=25G                   # max across all steps (step 1.3)
+#SBATCH --mem=24G                   # max across all steps (step 1.3)
 #SBATCH --array=1-10                # change to match number of lines in acc_map.tsv
                                     # use 1-N%K to throttle concurrent tasks (e.g. 1-50%10)
 
@@ -57,6 +57,21 @@ echo "Array task : ${SLURM_ARRAY_TASK_ID} | Job: ${SLURM_JOB_ID}"
 echo "Node       : $(hostname)"
 echo "Started    : $(date)"
 echo "============================================================"
+
+###############################################################################
+# SKIP CHECK — all three steps must have succeeded to skip
+###############################################################################
+
+d1_log="${DATA}/raw/${SRR_ACC}.log"
+d2_log="${DATA}/preprocessed/${SRR_ACC}.log"
+d3_log="${DATA}/mapped/${SRR_ACC}.log"
+
+if [[ -f "${d1_log}" ]] && grep -q "^VALIDATION SUCCESS:" "${d1_log}" && grep -q "^SUCCESS:" "${d1_log}" && \
+   [[ -f "${d2_log}" ]] && grep -q "^SUCCESS:" "${d2_log}" && \
+   [[ -f "${d3_log}" ]] && grep -q "^SUCCESS:" "${d3_log}"; then
+    echo "SKIPPED: ${SRR_ACC} all pipeline steps completed successfully"
+    exit 0
+fi
 
 ###############################################################################
 # PIPELINE STEPS (sequential)

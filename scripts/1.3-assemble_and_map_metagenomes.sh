@@ -60,16 +60,10 @@ assemble_and_map_metagenomes() {
     local ERZ_ACC="$2"
     local PREPROC_DIR="${DATA}/preprocessed/${SRR_ACC}"
     local OUTPUT_DIR="${DATA}/mapped/${SRR_ACC}"
-    local LOG_FILE="${DATA}/mapped/${SRR_ACC}.log"
+    local OUT_LOG="${DATA}/mapped/${SRR_ACC}.log"
     local ASSEMBLY_FILE="${CONTIGS}/${ERZ_ACC}.fasta.gz"
-   
-    # Skip only if SUCCESS tag is found in the log
-    if [[ -f "${LOG_FILE}" ]] && grep -q "^SUCCESS:" "${LOG_FILE}"; then
-        echo "SKIPPED: ${SRR_ACC} already assembled and mapped (SUCCESS tag found in log)"
-        return 0
-    fi
 
-    # No SUCCESS tag — remove any partial output and re-process
+    # Remove any partial output and re-process
     [[ -d "${OUTPUT_DIR}" ]] && rm -rf "${OUTPUT_DIR}"
 
     # Write header log
@@ -82,11 +76,11 @@ assemble_and_map_metagenomes() {
         echo "Preprocessed data directory: ${PREPROC_DIR}"
         echo "Output directory: ${OUTPUT_DIR}"
         echo "-----------------------------------"
-    } > "${LOG_FILE}"
+    } > "${OUT_LOG}"
 
     # Check if preprocessed data exists
     if [[ ! -d "${PREPROC_DIR}" ]]; then
-        echo "ERROR: Preprocessed data not found for ${SRR_ACC} at ${PREPROC_DIR}" | tee -a "${LOG_FILE}"
+        echo "ERROR: Preprocessed data not found for ${SRR_ACC} at ${PREPROC_DIR}" | tee -a "${OUT_LOG}"
         return 1
     fi
 
@@ -95,15 +89,15 @@ assemble_and_map_metagenomes() {
     R2=$(find "${PREPROC_DIR}" \( -name "*_2.fastq.gz" -o -name "*_R2*.fastq.gz" -o -name "*_2.fq.gz" \) | head -1)
 
     if [[ -z "${R1}" || -z "${R2}" ]]; then
-        echo "ERROR: Could not find paired-end reads for ${SRR_ACC}" | tee -a "${LOG_FILE}"
+        echo "ERROR: Could not find paired-end reads for ${SRR_ACC}" | tee -a "${OUT_LOG}"
         return 1
     fi
 
-    echo "Found R1: ${R1}" | tee -a "${LOG_FILE}"
-    echo "Found R2: ${R2}" | tee -a "${LOG_FILE}"
+    echo "Found R1: ${R1}" | tee -a "${OUT_LOG}"
+    echo "Found R2: ${R2}" | tee -a "${OUT_LOG}"
 
     # Run assembly and mapping pipeline
-    echo "Running assembly and mapping pipeline for ${SRR_ACC}..." | tee -a "${LOG_FILE}"
+    echo "Running assembly and mapping pipeline for ${SRR_ACC}..." | tee -a "${OUT_LOG}"
 
     "${SCRIPTS}/toolbox/metagenomic_pipelines/modules/3-assembly_and_map_pipeline.sh" \
         --reads1 "${R1}" \
@@ -113,15 +107,15 @@ assemble_and_map_metagenomes() {
         --output_dir "${OUTPUT_DIR}" \
         --nslots "${SLURM_CPUS_PER_TASK}" \
         --overwrite f \
-        2>&1 | tee -a "${LOG_FILE}"
+        2>&1 | tee -a "${OUT_LOG}"
 
     STATUS=${PIPESTATUS[0]} 
 
     if [[ ${STATUS} -eq 0 ]]; then
-        echo "SUCCESS: ${SRR_ACC} (${ERZ_ACC}) assembled and mapped at $(date)" | tee -a "${LOG_FILE}"
+        echo "SUCCESS: ${SRR_ACC} (${ERZ_ACC}) assembled and mapped at $(date)" | tee -a "${OUT_LOG}"
         return 0
     else
-        echo "ERROR: Assembly and mapping failed for ${SRR_ACC} (${ERZ_ACC}) at $(date)" | tee -a "${LOG_FILE}"
+        echo "ERROR: Assembly and mapping failed for ${SRR_ACC} (${ERZ_ACC}) at $(date)" | tee -a "${OUT_LOG}"
         return 1
     fi
 }

@@ -10,17 +10,13 @@ source /home/epereira/workspace/dev/ocean-metagenomes/conf.sh
 
 # Define batch ranges
 declare -A BATCH_START=(
-    [1]=1    [2]=201   [3]=301   [4]=401   [5]=501
-    [6]=601  [7]=701   [8]=801   [9]=901   [10]=1001
-    [11]=1101 [12]=1201 [13]=1301
-    ["test"]=1
+    [1]=1      [2]=201   [3]=401   [4]=601   [5]=801
+    [6]=1001   [7]=1201 ["test"]=1
 )
 
 declare -A BATCH_END=(
-    [1]=200    [2]=300   [3]=400   [4]=500   [5]=600
-    [6]=700    [7]=800   [8]=900   [9]=1000  [10]=1100
-    [11]=1200  [12]=1300 [13]=1379
-    ["test"]=4
+    [1]=200    [2]=400   [3]=600   [4]=800   [5]=1000
+    [6]=1200   [7]=1379 ["test"]=4
 )
 
 # Colors for output
@@ -36,24 +32,18 @@ get_accession() {
 }
 
 check_sample_stages() {
-    local srr_acc=$1
+    local SRR_ACC=$1
 
     local d1_ok=0 d2_ok=0 d3_ok=0
 
-    if [[ -d "${DATA}/raw/${srr_acc}" ]]; then
-        local count=$(find "${DATA}/raw/${srr_acc}" -type f \( -name "*.fastq.gz" -o -name "*.fastq" \) 2>/dev/null | wc -l)
-        [[ $count -gt 0 ]] && d1_ok=1
-    fi
+    local d1_log="${DATA}/raw/${SRR_ACC}.log"
+    [[ -f "${d1_log}" ]] && grep -q "^SUCCESS:" "${d1_log}" && grep -q "^VALIDATION SUCCESS:" "${d1_log}" && d1_ok=1
 
-    if [[ -d "${DATA}/preprocessed/${srr_acc}" ]]; then
-        local count=$(find "${DATA}/preprocessed/${srr_acc}" -type f -name "*.fastq.gz" 2>/dev/null | wc -l)
-        [[ $count -gt 0 ]] && d2_ok=1
-    fi
+    local d2_log="${DATA}/preprocessed/${SRR_ACC}.log"
+    [[ -f "${d2_log}" ]] && grep -q "^SUCCESS:" "${d2_log}" && d2_ok=1
 
-    if [[ -d "${DATA}/mapped/${srr_acc}" ]]; then
-        local count=$(find "${DATA}/mapped/${srr_acc}" -type f -name "*.bam" 2>/dev/null | wc -l)
-        [[ $count -gt 0 ]] && d3_ok=1
-    fi
+    local d3_log="${DATA}/mapped/${SRR_ACC}.log"
+    [[ -f "${d3_log}" ]] && grep -q "^SUCCESS:" "${d3_log}" && d3_ok=1
 
     echo "${d1_ok} ${d2_ok} ${d3_ok}"
 }
@@ -124,7 +114,7 @@ display_dashboard() {
     local total_failed=0
     local grand_total=0
 
-    for batch in {1..13}; do
+    for batch in {1..7}; do
         local start=${BATCH_START[$batch]}
         local end=${BATCH_END[$batch]}
         local batch_total=$((end - start + 1))
