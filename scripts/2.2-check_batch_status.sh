@@ -39,10 +39,14 @@ check_sample_stages() {
     local d1_ok=0 d2_ok=0 d3_ok=0
 
     local d1_log="${DATA}/raw/${SRR_ACC}.log"
-    [[ -f "${d1_log}" ]] && grep -q "^SUCCESS:" "${d1_log}" && grep -q "^VALIDATION SUCCESS:" "${d1_log}" && d1_ok=1
+    local d1_del_log="${DATA}/raw/${SRR_ACC}/${SRR_ACC}_deleted.log"
+    [[ -f "${d1_log}" ]] && grep -q "^SUCCESS:" "${d1_log}" && grep -q "^VALIDATION SUCCESS:" "${d1_log}" && \
+    [[ -f "${d1_del_log}" ]] && grep -q "^SUCCESS:" "${d1_del_log}" && d1_ok=1
 
     local d2_log="${DATA}/preprocessed/${SRR_ACC}.log"
-    [[ -f "${d2_log}" ]] && grep -q "^SUCCESS:" "${d2_log}" && d2_ok=1
+    local d2_del_log="${DATA}/preprocessed/${SRR_ACC}/${SRR_ACC}_deleted.log"
+    [[ -f "${d2_log}" ]] && grep -q "^SUCCESS:" "${d2_log}" && \
+    [[ -f "${d2_del_log}" ]] && grep -q "^SUCCESS:" "${d2_del_log}" && d2_ok=1
 
     local d3_log="${DATA}/mapped/${SRR_ACC}.log"
     [[ -f "${d3_log}" ]] && grep -q "^SUCCESS:" "${d3_log}" && d3_ok=1
