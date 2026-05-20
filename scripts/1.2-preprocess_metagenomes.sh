@@ -75,32 +75,50 @@ preprocess_metagenomes() {
     R1=$(find "${RAW_DIR}" \( -name "*_1.fastq.gz" -o -name "*_R1*.fastq.gz" -o -name "*_1.fq.gz" \) | head -1)
     R2=$(find "${RAW_DIR}" \( -name "*_2.fastq.gz" -o -name "*_R2*.fastq.gz" -o -name "*_2.fq.gz" \) | head -1)
 
-    if [[ -z "${R1}" || -z "${R2}" ]]; then
-        echo "ERROR: Could not find paired-end reads for ${SRR_ACC}" | tee -a "${OUT_LOG}"
-        return 1
+    if [[ -n "${R1}" && -n "${R2}" ]]; then
+        echo "Found R1: ${R1}" | tee -a "${OUT_LOG}"
+        echo "Found R2: ${R2}" | tee -a "${OUT_LOG}"
+        echo "Running paired-end preprocessing pipeline for ${SRR_ACC}..." | tee -a "${OUT_LOG}"
+
+        "${SCRIPTS}/toolbox/metagenomic_pipelines/modules/2-preprocess_pipeline.sh" \
+            --reads "${R1}" \
+            --reads2 "${R2}" \
+            --sample_name "${SRR_ACC}" \
+            --output_dir "${OUTPUT_DIR}" \
+            --nslots "${SLURM_CPUS_PER_TASK}" \
+            --min_length 75 \
+            --min_qual 20 \
+            --trim_adapters t \
+            --output_merged f \
+            --output_pe t \
+            --clean t \
+            --compress t \
+            --overwrite f \
+            2>&1 | tee -a "${OUT_LOG}"
+    else
+        # Fall back to single-end: find any fastq file
+        SE=$(find "${RAW_DIR}" \( -name "*.fastq.gz" -o -name "*.fq.gz" -o -name "*.fastq" -o -name "*.fq" \) | head -1)
+        if [[ -z "${SE}" ]]; then
+            echo "ERROR: Could not find any reads for ${SRR_ACC}" | tee -a "${OUT_LOG}"
+            return 1
+        fi
+        echo "No paired-end reads found; running single-end preprocessing for ${SRR_ACC}..." | tee -a "${OUT_LOG}"
+        echo "Found SE: ${SE}" | tee -a "${OUT_LOG}"
+
+        "${SCRIPTS}/toolbox/metagenomic_pipelines/modules/2-preprocess_pipeline.sh" \
+            --reads "${SE}" \
+            --single_end t \
+            --sample_name "${SRR_ACC}" \
+            --output_dir "${OUTPUT_DIR}" \
+            --nslots "${SLURM_CPUS_PER_TASK}" \
+            --min_length 75 \
+            --min_qual 20 \
+            --trim_adapters t \
+            --clean t \
+            --compress t \
+            --overwrite f \
+            2>&1 | tee -a "${OUT_LOG}"
     fi
-
-    echo "Found R1: ${R1}" | tee -a "${OUT_LOG}"
-    echo "Found R2: ${R2}" | tee -a "${OUT_LOG}"
-
-    # Run preprocessing pipeline
-    echo "Running preprocessing pipeline for ${SRR_ACC}..." | tee -a "${OUT_LOG}"
-    
-    "${SCRIPTS}/toolbox/metagenomic_pipelines/modules/2-preprocess_pipeline.sh" \
-        --reads "${R1}" \
-        --reads2 "${R2}" \
-        --sample_name "${SRR_ACC}" \
-        --output_dir "${OUTPUT_DIR}" \
-        --nslots "${SLURM_CPUS_PER_TASK}" \
-        --min_length 75 \
-        --min_qual 20 \
-        --trim_adapters t \
-        --output_merged f \
-        --output_pe t \
-        --clean t \
-        --compress t \
-        --overwrite f \
-        2>&1 | tee -a "${OUT_LOG}"
 
     STATUS=${PIPESTATUS[0]}
 
