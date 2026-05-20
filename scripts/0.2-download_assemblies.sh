@@ -9,7 +9,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=1G
-#SBATCH --array=1-226%5   # Replace NLINES with: grep -c . <erz_accessions_file>
+#SBATCH --array=1-2   # Replace NLINES with: grep -c . <erz_accessions_file>
 
 ###############################################################################
 # ENVIRONMENT AND INITIAL SETUP
@@ -19,7 +19,10 @@ source /home/epereira/workspace/dev/ocean-metagenomes/conf.sh
 set -euo pipefail
 
 # Path to file with one ERZ accession per line
-ERZ_FILE="/home/epereira/workspace/dev/ocean-metagenomes/resources/incomplete_files.txt"   # <-- set this path before submitting
+# Incomplete assemblies
+# ERZ_FILE="/home/epereira/workspace/dev/ocean-metagenomes/resources/incomplete_files.txt"   # <-- set this path before submitting
+# Missing assemblies
+ERZ_FILE="/home/epereira/workspace/dev/ocean-metagenomes/resources/missing_files.txt"
 
 if [[ -z "$ERZ_FILE" ]]; then
     echo "[ERROR] ERZ_FILE is not set"

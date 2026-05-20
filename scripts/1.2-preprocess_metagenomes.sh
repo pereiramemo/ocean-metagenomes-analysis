@@ -1,6 +1,6 @@
 #!/bin/bash
 ###############################################################################
-# ENVIRONMENT AND INITIAL SETUP
+# 1. Set environment
 ###############################################################################
 
 # Load configuration
@@ -20,7 +20,7 @@ if [[ ! -f "${RESOURCES}/acc_map.tsv" ]]; then
 fi
 
 ###############################################################################
-# SELECT ACCESSION FOR THIS ARRAY TASK
+# 2. Select accession for this array task
 # When called from the orchestrator (1.0-metagenome_pipeline.sh), $1 is the
 # SRR accession. When submitted as a standalone SLURM array job, the accession
 # is looked up from acc_map.tsv using SLURM_ARRAY_TASK_ID.
@@ -41,7 +41,7 @@ if [[ -z "${SRR_ACC}" ]]; then
 fi
 
 ###############################################################################
-# PREPROCESS FUNCTION
+# 3. Preprocess function
 ###############################################################################
 
 preprocess_metagenomes() {
@@ -114,7 +114,7 @@ preprocess_metagenomes() {
 }
 
 ###############################################################################
-# RUN
+# 4. Execute preprocessing for the selected accession
 ###############################################################################
 
 # Activate metagenomic_pipeline environment before running
