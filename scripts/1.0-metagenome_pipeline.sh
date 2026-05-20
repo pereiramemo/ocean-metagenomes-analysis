@@ -32,20 +32,44 @@ mkdir -p "$(dirname "${WORKSPACE}/logs/slurm_logs/placeholder")"
 
 ###############################################################################
 # SELECT ACCESSION FOR THIS ARRAY TASK
+#
+# Two modes:
+#   Direct accession:  bash 1.0-metagenome_pipeline.sh <ERZ_or_SRR_accession>
+#   SLURM array task:  sbatch (no args) — uses SLURM_ARRAY_TASK_ID as line number
 ###############################################################################
 
-LINE_NUM="${SLURM_ARRAY_TASK_ID}"
-
-ERZ_ACC=$(sed -n "${LINE_NUM}p" "${RESOURCES}/acc_map.tsv" | cut -f1)
-SRR_ACC=$(sed -n "${LINE_NUM}p" "${RESOURCES}/acc_map.tsv" | cut -f2)
+if [[ -n "${1:-}" ]]; then
+    # Direct accession mode: look up the other ID from acc_map.tsv
+    ARG="$1"
+    case "${ARG}" in
+        ERZ*)
+            ERZ_ACC="${ARG}"
+            SRR_ACC=$(awk -F'\t' -v a="${ERZ_ACC}" '$1==a{print $2; exit}' "${RESOURCES}/acc_map.tsv")
+            ;;
+        SRR*|DRR*|ERR*)
+            SRR_ACC="${ARG}"
+            ERZ_ACC=$(awk -F'\t' -v a="${SRR_ACC}" '$2==a{print $1; exit}' "${RESOURCES}/acc_map.tsv")
+            ;;
+        *)
+            echo "ERROR: Unrecognized accession format '${ARG}'. Expected ERZ*, SRR*, DRR*, or ERR*."
+            exit 1
+            ;;
+    esac
+    echo "Accession mode: ${ARG}"
+else
+    # SLURM array task mode: task ID is the line number in acc_map.tsv
+    LINE_NUM="${SLURM_ARRAY_TASK_ID}"
+    ERZ_ACC=$(sed -n "${LINE_NUM}p" "${RESOURCES}/acc_map.tsv" | cut -f1)
+    SRR_ACC=$(sed -n "${LINE_NUM}p" "${RESOURCES}/acc_map.tsv" | cut -f2)
+fi
 
 if [[ -z "${SRR_ACC}" ]]; then
-    echo "ERROR: No SRR accession found for line ${LINE_NUM} (task ${SLURM_ARRAY_TASK_ID})"
+    echo "ERROR: No SRR accession found for '${1:-line ${SLURM_ARRAY_TASK_ID}}'"
     exit 1
 fi
 
 if [[ -z "${ERZ_ACC}" ]]; then
-    echo "ERROR: No ERZ accession found for line ${LINE_NUM} (task ${SLURM_ARRAY_TASK_ID})"
+    echo "ERROR: No ERZ accession found for '${1:-line ${SLURM_ARRAY_TASK_ID}}'"
     exit 1
 fi
 
