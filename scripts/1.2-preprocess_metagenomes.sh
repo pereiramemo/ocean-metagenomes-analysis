@@ -96,14 +96,37 @@ preprocess_metagenomes() {
             --overwrite f \
             2>&1 | tee -a "${OUT_LOG}"
     else
-        # Fall back to single-end: find any fastq file
-        SE=$(find "${RAW_DIR}" \( -name "*.fastq.gz" -o -name "*.fq.gz" -o -name "*.fastq" -o -name "*.fq" \) | head -1)
-        if [[ -z "${SE}" ]]; then
+        # Fall back to single-end: require exactly one FASTQ file with no R1/_1 suffix
+        mapfile -t ALL_FQ < <(find "${RAW_DIR}" \( -name "*.fastq.gz" -o -name "*.fq.gz" -o -name "*.fastq" -o -name "*.fq" \))
+        local fq_count=${#ALL_FQ[@]}
+
+        if [[ ${fq_count} -eq 0 ]]; then
             echo "ERROR: Could not find any reads for ${SRR_ACC}" | tee -a "${OUT_LOG}"
             return 1
         fi
-        echo "No paired-end reads found; running single-end preprocessing for ${SRR_ACC}..." | tee -a "${OUT_LOG}"
-        echo "Found SE: ${SE}" | tee -a "${OUT_LOG}"
+
+        if [[ ${fq_count} -gt 1 ]]; then
+            echo "ERROR: Found ${fq_count} FASTQ files but could not identify paired-end reads for ${SRR_ACC}" | tee -a "${OUT_LOG}"
+            return 1
+        fi
+
+        SE="${ALL_FQ[0]}"
+        local se_basename
+        se_basename=$(basename "${SE}")
+
+        # Reject if the file looks like a paired-end R1 with a missing R2
+        if [[ "${se_basename}" =~ (_1\.|_R1[._]) ]]; then
+            echo "ERROR: Found only R1 file (${se_basename}) but no matching R2 for ${SRR_ACC}" | tee -a "${OUT_LOG}"
+            return 1
+        fi
+
+        if [[ "${se_basename}" =~ (_2\.|_R2[._]) ]]; then
+            echo "ERROR: Found only R2 file (${se_basename}) but no matching R1 for ${SRR_ACC}" | tee -a "${OUT_LOG}"
+            return 1
+        fi
+
+        echo "Found single-end file: ${SE}" | tee -a "${OUT_LOG}"
+        echo "Running single-end preprocessing pipeline for ${SRR_ACC}..." | tee -a "${OUT_LOG}"
 
         "${SCRIPTS}/toolbox/metagenomic_pipelines/modules/2-preprocess_pipeline.sh" \
             --reads "${SE}" \

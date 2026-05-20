@@ -88,26 +88,64 @@ assemble_and_map_metagenomes() {
     R1=$(find "${PREPROC_DIR}" \( -name "*_1.fastq.gz" -o -name "*_R1*.fastq.gz" -o -name "*_1.fq.gz" \) | head -1)
     R2=$(find "${PREPROC_DIR}" \( -name "*_2.fastq.gz" -o -name "*_R2*.fastq.gz" -o -name "*_2.fq.gz" \) | head -1)
 
-    if [[ -z "${R1}" || -z "${R2}" ]]; then
-        echo "ERROR: Could not find paired-end reads for ${SRR_ACC}" | tee -a "${OUT_LOG}"
-        return 1
+    if [[ -n "${R1}" && -n "${R2}" ]]; then
+        echo "Found R1: ${R1}" | tee -a "${OUT_LOG}"
+        echo "Found R2: ${R2}" | tee -a "${OUT_LOG}"
+        echo "Running paired-end assembly and mapping pipeline for ${SRR_ACC}..." | tee -a "${OUT_LOG}"
+
+        "${SCRIPTS}/toolbox/metagenomic_pipelines/modules/3-assembly_and_map_pipeline.sh" \
+            --reads1 "${R1}" \
+            --reads2 "${R2}" \
+            --contigs "${ASSEMBLY_FILE}" \
+            --sample_name "${SRR_ACC}" \
+            --output_dir "${OUTPUT_DIR}" \
+            --nslots "${SLURM_CPUS_PER_TASK}" \
+            --overwrite f \
+            2>&1 | tee -a "${OUT_LOG}"
+    else
+        # Fall back to single-end: require exactly one FASTQ file with no R1/_1 suffix
+        mapfile -t ALL_FQ < <(find "${PREPROC_DIR}" \( -name "*.fastq.gz" -o -name "*.fq.gz" -o -name "*.fastq" -o -name "*.fq" \))
+        local fq_count=${#ALL_FQ[@]}
+
+        if [[ ${fq_count} -eq 0 ]]; then
+            echo "ERROR: Could not find any reads for ${SRR_ACC}" | tee -a "${OUT_LOG}"
+            return 1
+        fi
+
+        if [[ ${fq_count} -gt 1 ]]; then
+            echo "ERROR: Found ${fq_count} FASTQ files but could not identify paired-end reads for ${SRR_ACC}" | tee -a "${OUT_LOG}"
+            return 1
+        fi
+
+        SE="${ALL_FQ[0]}"
+        local se_basename
+        se_basename=$(basename "${SE}")
+
+        # Reject if the file looks like a paired-end R1 with a missing R2
+        if [[ "${se_basename}" =~ (_1\.|_R1[._]) ]]; then
+            echo "ERROR: Found only R1 file (${se_basename}) but no matching R2 for ${SRR_ACC}" | tee -a "${OUT_LOG}"
+            return 1
+        fi
+
+        if [[ "${se_basename}" =~ (_2\.|_R2[._]) ]]; then
+            echo "ERROR: Found only R2 file (${se_basename}) but no matching R1 for ${SRR_ACC}" | tee -a "${OUT_LOG}"
+            return 1
+        fi
+
+
+        echo "Found single-end file: ${SE}" | tee -a "${OUT_LOG}"
+        echo "Running single-end assembly and mapping pipeline for ${SRR_ACC}..." | tee -a "${OUT_LOG}"
+
+        "${SCRIPTS}/toolbox/metagenomic_pipelines/modules/3-assembly_and_map_pipeline.sh" \
+            --reads1 "${SE}" \
+            --single_end t \
+            --contigs "${ASSEMBLY_FILE}" \
+            --sample_name "${SRR_ACC}" \
+            --output_dir "${OUTPUT_DIR}" \
+            --nslots "${SLURM_CPUS_PER_TASK}" \
+            --overwrite f \
+            2>&1 | tee -a "${OUT_LOG}"
     fi
-
-    echo "Found R1: ${R1}" | tee -a "${OUT_LOG}"
-    echo "Found R2: ${R2}" | tee -a "${OUT_LOG}"
-
-    # Run assembly and mapping pipeline
-    echo "Running assembly and mapping pipeline for ${SRR_ACC}..." | tee -a "${OUT_LOG}"
-
-    "${SCRIPTS}/toolbox/metagenomic_pipelines/modules/3-assembly_and_map_pipeline.sh" \
-        --reads1 "${R1}" \
-        --reads2 "${R2}" \
-        --contigs "${ASSEMBLY_FILE}" \
-        --sample_name "${SRR_ACC}" \
-        --output_dir "${OUTPUT_DIR}" \
-        --nslots "${SLURM_CPUS_PER_TASK}" \
-        --overwrite f \
-        2>&1 | tee -a "${OUT_LOG}"
 
     STATUS=${PIPESTATUS[0]} 
 
