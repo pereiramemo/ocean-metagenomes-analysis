@@ -120,6 +120,7 @@ preprocess_metagenomes() {
             return 1
         fi
 
+        # Reject if the file looks like a paired-end R2 with a missing R1
         if [[ "${se_basename}" =~ (_2\.|_R2[._]) ]]; then
             echo "ERROR: Found only R2 file (${se_basename}) but no matching R1 for ${SRR_ACC}" | tee -a "${OUT_LOG}"
             return 1
