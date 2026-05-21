@@ -54,6 +54,10 @@ RESOURCES="${WORKSPACE}/resources"
 CONTIGS_ORG="/home/phuber/wplace/AtlantECO_j/MGNIFY/test/conting_sequences"
 CONTIGS="${WORKSPACE}/data/assemblies"
 
+# tools
+preprocess_pipeline="${SCRIPTS}/toolbox/MG-Proc/modules/2-preprocess_pipeline.sh"
+assembly_and_map_pipeline="${SCRIPTS}/toolbox/MG-Proc/modules/3-assembly_and_map_pipeline.sh"
+
 # Export variables
 export WORKSPACE
 export DATA

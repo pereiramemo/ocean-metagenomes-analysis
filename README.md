@@ -29,6 +29,15 @@ bash scripts/2.1-batch_manager.sh 1
 # Retry only failed samples from a previous run
 bash scripts/2.1-batch_manager.sh 1 --retry
 
+# Run a specific set of accessions from a file (one ERZ/SRR per line)
+bash scripts/2.1-batch_manager.sh --accessions my_list.txt
+
+# Run a specific set of accessions provided inline as a comma-separated list
+bash scripts/2.1-batch_manager.sh --accessions ERZ001,ERZ002,SRR123
+
+# Combine multiple log files into a comma-separated list and re-run
+bash scripts/2.1-batch_manager.sh --accessions "$(cat logs/failed_1.txt logs/failed_2.txt | paste -sd ',')"
+
 # Monitor all batches
 bash scripts/2.3-batch_dashboard.sh
 bash scripts/2.3-batch_dashboard.sh --watch   # auto-refresh every 60s
@@ -56,8 +65,8 @@ Orchestrated by `1.0-metagenome_pipeline.sh` as a single SLURM array job. Each a
 |--------|---------|
 | `1.0-metagenome_pipeline.sh` | **Orchestrator** — owns all SLURM directives, skip check, runs 1.1→1.2→1.3→1.4 |
 | `1.1-download_metagenomes.sh` | Downloads raw FASTQ from ENA/SRA via kingfisher (10 retries, MD5 validation) |
-| `1.2-preprocess_metagenomes.sh` | QC, adapter trimming, paired-end merging, quality filtering |
-| `1.3-assemble_and_map_metagenomes.sh` | MEGAHIT assembly + BWA-MEM mapping → sorted/indexed BAM |
+| `1.2-preprocess_metagenomes.sh` | QC, adapter trimming, quality filtering; auto-detects paired-end (R1+R2) or single-end |
+| `1.3-assemble_and_map_metagenomes.sh` | MEGAHIT assembly + BWA-MEM mapping → sorted/indexed BAM; auto-detects paired-end or single-end |
 | `1.4-cleanup_fastq.sh` | Removes raw and preprocessed FASTQ files after successful assembly |
 
 Steps 1.1–1.3 contain no skip logic — they always execute when called. The skip decision is made exclusively by `1.0` before invoking any step. Steps 1.1–1.4 can be run standalone (accepting the SRR accession as `$1`, falling back to `SLURM_ARRAY_TASK_ID`), but will always re-execute without the skip protection.
@@ -66,7 +75,7 @@ Steps 1.1–1.3 contain no skip logic — they always execute when called. The s
 
 | Script | Purpose |
 |--------|---------|
-| `2.1-batch_manager.sh` | Submits 1.0 as a SLURM array job, waits for completion, runs status check |
+| `2.1-batch_manager.sh` | Submits 1.0 as a SLURM array job; supports batch mode, retry mode, and accessions mode (file or comma-separated list) |
 | `2.2-check_batch_status.sh` | Inspects logs and output directories; writes `status.txt` and `details.csv` |
 | `2.3-batch_dashboard.sh` | Color-coded dashboard showing progress across all 7 batches |
 
@@ -179,6 +188,34 @@ These logs serve as a permanent audit trail. The cleanup step is also idempotent
 | 6 | 1001–1200 | 200 |
 | 7 | 1201–1379 | 179 |
 | test | 1–4 | 4 |
+
+## Single-End Read Detection
+
+Steps 1.2 and 1.3 automatically detect the sequencing layout for each sample:
+
+1. **Paired-end** — if both an R1 file (`*_1.fastq.gz`, `*_R1*.fastq.gz`) and an R2 file (`*_2.fastq.gz`, `*_R2*.fastq.gz`) are found, the paired-end pipeline is used (merging + PE output for 1.2; paired mapping for 1.3).
+2. **Single-end** — if no R1/R2 pair is found, the script falls back to single-end mode, but only if:
+   - Exactly **one** FASTQ file exists in the directory.
+   - Its filename does **not** carry a `_1.`/`_R1` or `_2.`/`_R2` suffix (which would indicate a missing pair rather than a genuine single-end library).
+
+If none of these conditions are met (zero files, more than one ambiguous file, or an orphaned R1/R2), the step exits with an error.
+
+## Accessions Mode
+
+In addition to batch-range processing, `2.1-batch_manager.sh` accepts an explicit list of accessions via `--accessions`:
+
+```bash
+# From a file (one ERZ or SRR accession per line)
+bash scripts/2.1-batch_manager.sh --accessions failed_samples.txt
+
+# Inline comma-separated list
+bash scripts/2.1-batch_manager.sh --accessions ERZ123,SRR456,ERR789
+
+# Combine multiple files on the fly
+bash scripts/2.1-batch_manager.sh --accessions "$(cat logs/failed_a.txt logs/failed_b.txt | paste -sd ',')"
+```
+
+Accessions are resolved to their line numbers in `resources/acc_map.tsv` and submitted as a SLURM array job. Both ERZ (column 1) and SRR/ERR/DRR (column 2) identifiers are supported. Accessions not found in the map are reported as warnings and skipped.
 
 ## Skip / Retry Logic
 
