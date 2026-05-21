@@ -80,7 +80,7 @@ preprocess_metagenomes() {
         echo "Found R2: ${R2}" | tee -a "${OUT_LOG}"
         echo "Running paired-end preprocessing pipeline for ${SRR_ACC}..." | tee -a "${OUT_LOG}"
 
-        "${SCRIPTS}/toolbox/metagenomic_pipelines/modules/2-preprocess_pipeline.sh" \
+        "${preprocess_pipeline}" \
             --reads "${R1}" \
             --reads2 "${R2}" \
             --sample_name "${SRR_ACC}" \
@@ -129,7 +129,7 @@ preprocess_metagenomes() {
         echo "Found single-end file: ${SE}" | tee -a "${OUT_LOG}"
         echo "Running single-end preprocessing pipeline for ${SRR_ACC}..." | tee -a "${OUT_LOG}"
 
-        "${SCRIPTS}/toolbox/metagenomic_pipelines/modules/2-preprocess_pipeline.sh" \
+        "${preprocess_pipeline}" \
             --reads "${SE}" \
             --single_end t \
             --sample_name "${SRR_ACC}" \

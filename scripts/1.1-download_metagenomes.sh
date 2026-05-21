@@ -1,6 +1,6 @@
 #!/bin/bash
 ###############################################################################
-# ENVIRONMENT AND INITIAL SETUP
+# 1. Set environment
 ###############################################################################
 
 # Load configuration
@@ -20,7 +20,7 @@ if [[ ! -f "${RESOURCES}/acc_map.tsv" ]]; then
 fi
 
 ###############################################################################
-# SELECT ACCESSION FOR THIS ARRAY TASK
+# 2. Select accession for this array task
 # When called from the orchestrator (1.0-metagenome_pipeline.sh), $1 is the
 # SRR accession. When submitted as a standalone SLURM array job, the accession
 # is looked up from acc_map.tsv using SLURM_ARRAY_TASK_ID.
@@ -41,7 +41,7 @@ if [[ -z "${SRR_ACC}" ]]; then
 fi
 
 ###############################################################################
-# VALIDATION FUNCTIONS
+# 3. Validation function
 ###############################################################################
 
 validate_download() {
@@ -102,7 +102,7 @@ validate_download() {
 }
 
 ###############################################################################
-# DOWNLOAD FUNCTION WITH RETRY LOGIC
+# 4. Download function with retry logic
 ###############################################################################
 
 download_metagenomes() {
@@ -170,7 +170,7 @@ download_metagenomes() {
 }
 
 ###############################################################################
-# RUN
+# 5. Main execution
 ###############################################################################
 
 # Activate metagenomic_pipeline environment before running

@@ -26,6 +26,8 @@ set -euo pipefail
 
 source /home/epereira/workspace/dev/ocean-metagenomes/conf.sh
 
+throttle=10  # Max concurrent tasks for SLURM array jobs (adjust based on cluster limits and resource requirements)
+
 ###############################################################################
 # 2. Define the BATCH_START and BATCH_END associative arrays to specify line number ranges for each batch.
 ###############################################################################
@@ -230,7 +232,7 @@ main() {
 
             echo "PIPELINE: download → preprocess → assemble+map → cleanup"
             echo "────────────────────────────────────────────────────────────────────────────────"
-            if ! submit_and_wait "${SCRIPTS}/1.0-metagenome_pipeline.sh" "${array_spec}" "5" "Full pipeline (1.0)"; then
+            if ! submit_and_wait "${SCRIPTS}/1.0-metagenome_pipeline.sh" "${array_spec}" "${throttle}" "Full pipeline (1.0)"; then
                 echo "Pipeline failed for one or more samples."
             fi
             echo ""
@@ -243,7 +245,7 @@ main() {
         return
     fi
 
-    # ── Batch number mode (existing behaviour) ───────────────────────────────
+    # ── Batch number mode ───────────────────────────────
     local batch=$1
     local retry=${2:-}
     validate_batch "${batch}"
@@ -281,7 +283,7 @@ main() {
 
         echo "PIPELINE: download → preprocess → assemble+map → cleanup"
         echo "────────────────────────────────────────────────────────────────────────────────"
-        if ! submit_and_wait "${SCRIPTS}/1.0-metagenome_pipeline.sh" "${array_spec}" "5" "Full pipeline (1.0)"; then
+        if ! submit_and_wait "${SCRIPTS}/1.0-metagenome_pipeline.sh" "${array_spec}" "${throttle}" "Full pipeline (1.0)"; then
             echo "Pipeline failed for one or more samples."
         fi
         echo ""

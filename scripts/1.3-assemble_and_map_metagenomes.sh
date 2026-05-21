@@ -93,7 +93,7 @@ assemble_and_map_metagenomes() {
         echo "Found R2: ${R2}" | tee -a "${OUT_LOG}"
         echo "Running paired-end assembly and mapping pipeline for ${SRR_ACC}..." | tee -a "${OUT_LOG}"
 
-        "${SCRIPTS}/toolbox/metagenomic_pipelines/modules/3-assembly_and_map_pipeline.sh" \
+        "${assembly_and_map_pipeline}" \
             --reads1 "${R1}" \
             --reads2 "${R2}" \
             --contigs "${ASSEMBLY_FILE}" \
@@ -136,7 +136,7 @@ assemble_and_map_metagenomes() {
         echo "Found single-end file: ${SE}" | tee -a "${OUT_LOG}"
         echo "Running single-end assembly and mapping pipeline for ${SRR_ACC}..." | tee -a "${OUT_LOG}"
 
-        "${SCRIPTS}/toolbox/metagenomic_pipelines/modules/3-assembly_and_map_pipeline.sh" \
+        "${assembly_and_map_pipeline}" \
             --reads1 "${SE}" \
             --single_end t \
             --contigs "${ASSEMBLY_FILE}" \
