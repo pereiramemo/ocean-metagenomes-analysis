@@ -1,0 +1,13 @@
+name: ocean-metagenomes-env
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - kingfisher
+  - pandas
+  - numpy
+  - pip
+  - pip:
+    - requests
+    - mg-toolkit
+prefix: /home/epereira/miniconda3/envs/ocean-metagenomes-env
