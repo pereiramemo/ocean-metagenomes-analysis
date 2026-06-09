@@ -9,7 +9,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=1G
-#SBATCH --array=1-2114%25   # This is: ls $CONTIGS/*.fasta.gz | wc -l
+#SBATCH --array=1-1379%100   # This is: wc -l resources/acc_map.tsv
 
 ###############################################################################
 # ENVIRONMENT AND INITIAL SETUP
@@ -19,25 +19,30 @@ source /home/epereira/workspace/dev/ocean-metagenomes/conf.sh
 set -euo pipefail
 
 ###############################################################################
-# SELECT FILE FOR THIS ARRAY TASK
+# SELECT ACCESSION FOR THIS ARRAY TASK
 ###############################################################################
 
-mapfile -t FILES < <(ls "${CONTIGS}"/*.fasta.gz)
-TOTAL=${#FILES[@]}
+ACC_MAP="${RESOURCES}/acc_map.tsv"
+TOTAL=$(wc -l < "${ACC_MAP}")
 
 if [[ ${SLURM_ARRAY_TASK_ID} -gt ${TOTAL} ]]; then
-    echo "ERROR: Array task ID ${SLURM_ARRAY_TASK_ID} exceeds number of files (${TOTAL})" | tee -a "${LOG}"
+    echo "ERROR: Array task ID ${SLURM_ARRAY_TASK_ID} exceeds number of accessions (${TOTAL})"
     exit 1
 fi
 
-FILE="${FILES[$((SLURM_ARRAY_TASK_ID - 1))]}"
+ACC=$(awk -v line="${SLURM_ARRAY_TASK_ID}" 'NR==line {print $1}' "${ACC_MAP}")
 
 ###############################################################################
 # CHECK GZIP INTEGRITY
 ###############################################################################
 
-FILE_NAME=$(basename "${FILE}")
+LOG="${WORKSPACE}/data/inbox/${ACC}_file_check.txt"
 
-LOG="${DATA}/assemblies/${FILE_NAME}_file_check.log"
+FILE=$(ls "${CONTIGS}/${ACC}"*FASTA.fasta.gz 2>/dev/null || true)
+
+if [[ -z "${FILE}" ]]; then
+    echo "MISSING: ${ACC} — no *FASTA.fasta.gz found in ${CONTIGS}" | tee -a "${LOG}"
+    exit 0
+fi
 
 gzip -tv "${FILE}" 2>&1 | tee -a "${LOG}"
