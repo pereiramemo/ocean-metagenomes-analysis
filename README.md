@@ -16,7 +16,7 @@ This project implements a multi-stage workflow for metagenomic analysis: downloa
 ### Installation
 
 ```bash
-conda env create -f scripts/toolbox/metagenomic_pipelines/environment.yml
+conda env create -f resources/requirements.yml
 conda activate ocean-metagenomes-env
 ```
 
